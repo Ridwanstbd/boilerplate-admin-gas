@@ -1,0 +1,45 @@
+<script>
+  function switchView(viewId) {
+    document.getElementById("login-view").classList.add("hidden");
+    document.getElementById("register-view").classList.add("hidden");
+    document.getElementById("dashboard-view").classList.add("hidden");
+
+    document.getElementById(viewId).classList.remove("hidden");
+    clearMessages();
+  }
+
+  function clearMessages() {
+    document.getElementById("login-msg").innerText = "";
+    document.getElementById("reg-msg").innerText = "";
+  }
+
+  function handleLogin() {
+    const email = document.getElementById("login-email").value;
+    const pass = document.getElementById("login-password").value;
+    const msgDiv = document.getElementById("login-msg");
+
+    if (!email || !pass) {
+      msgDiv.innerText = "Isi email dan password.";
+      msgDiv.style.color = "red";
+      return;
+    }
+
+    msgDiv.innerText = "Memverifikasi...";
+    msgDiv.style.color = "blue";
+
+    // Memanggil Controller (auth.controller.gs)
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (response.success) {
+          document.getElementById("user-email").innerText = response.email;
+          switchView("dashboard-view");
+        } else {
+          msgDiv.innerText = response.message;
+          msgDiv.style.color = "red";
+        }
+      })
+      .apiLoginUser(email, pass);
+  }
+
+  // Fungsi register dan logout diletakkan di sini juga
+</script>
