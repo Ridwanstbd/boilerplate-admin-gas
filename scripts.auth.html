@@ -1,21 +1,19 @@
 <script>
   /* ==========================================================
      scripts.auth.html
-     JavaScript client-side untuk halaman publik (login & register).
-     Hanya dimuat di index.public.html.
+     Handler login & register.
+     Setelah login berhasil, token disimpan di cookie.
   ========================================================== */
-
-  // ── Navigasi antar view ──────────────────────────────────
 
   function switchAuthView(viewId) {
     ["login-view", "register-view"].forEach(function (id) {
       document.getElementById(id).classList.add("hidden");
     });
     document.getElementById(viewId).classList.remove("hidden");
-    _clearAllMessages();
+    _clearAuthMessages();
   }
 
-  function _clearAllMessages() {
+  function _clearAuthMessages() {
     ["login-msg", "reg-msg"].forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) return;
@@ -31,14 +29,14 @@
     el.className = "msg " + (type || "info");
   }
 
-  function _setLoading(btnId, isLoading, defaultText) {
+  function _setLoading(btnId, loading, label) {
     var btn = document.getElementById(btnId);
     if (!btn) return;
-    btn.disabled = isLoading;
-    btn.textContent = isLoading ? "Memproses…" : defaultText;
+    btn.disabled = loading;
+    btn.textContent = loading ? "Memproses…" : label;
   }
 
-  // ── Handler Login ────────────────────────────────────────
+  // ── Login ─────────────────────────────────────────────────
 
   function handleLogin() {
     var email = document.getElementById("login-email").value.trim();
@@ -50,38 +48,31 @@
     }
 
     _setLoading("login-btn", true, "Masuk");
-    _setMsg("login-msg", "Memverifikasi kredensial…", "info");
+    _setMsg("login-msg", "Memverifikasi…", "info");
 
     google.script.run
       .withSuccessHandler(function (res) {
         _setLoading("login-btn", false, "Masuk");
         if (res.success) {
-          _setMsg("login-msg", "Login berhasil! Mengalihkan…", "success");
-          // Reload agar doGet() server mengevaluasi session baru
-          // dan merender index.app.html
+          // Simpan token di cookie — persisten saat refresh iframe GAS
+          _setCookie(TOKEN_KEY, res.token);
+          _token = res.token;
+          _setMsg("login-msg", "Berhasil masuk!", "success");
           setTimeout(function () {
-            google.script.run
-              .withSuccessHandler(function (url) {
-                window.top.location.href = url;
-              })
-              .getWebAppUrl();
-          }, 600);
+            _bootApp({ email: res.email, role: res.role });
+          }, 350);
         } else {
           _setMsg("login-msg", res.message, "error");
         }
       })
       .withFailureHandler(function (err) {
         _setLoading("login-btn", false, "Masuk");
-        _setMsg(
-          "login-msg",
-          "Terjadi kesalahan teknis: " + err.message,
-          "error",
-        );
+        _setMsg("login-msg", "Kesalahan teknis: " + err.message, "error");
       })
       .apiLoginUser(email, pass);
   }
 
-  // ── Handler Register ─────────────────────────────────────
+  // ── Register ──────────────────────────────────────────────
 
   function handleRegister() {
     var email = document.getElementById("reg-email").value.trim();
@@ -92,7 +83,6 @@
       _setMsg("reg-msg", "Semua kolom wajib diisi.", "error");
       return;
     }
-
     if (pass !== confirm) {
       _setMsg("reg-msg", "Konfirmasi password tidak cocok.", "error");
       return;
@@ -115,19 +105,19 @@
       })
       .withFailureHandler(function (err) {
         _setLoading("reg-btn", false, "Daftar");
-        _setMsg("reg-msg", "Terjadi kesalahan teknis: " + err.message, "error");
+        _setMsg("reg-msg", "Kesalahan teknis: " + err.message, "error");
       })
       .apiRegisterAdmin(email, pass);
   }
 
-  // ── Enter key shortcut ───────────────────────────────────
+  // ── Enter key shortcut ────────────────────────────────────
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter") return;
-    var loginVisible = !document
+    var isLogin = !document
       .getElementById("login-view")
       .classList.contains("hidden");
-    if (loginVisible) {
+    if (isLogin) {
       handleLogin();
     } else {
       handleRegister();

@@ -1,0 +1,115 @@
+<script>
+  /* ==========================================================
+     scripts.boot.html
+     Bootstrap — menentukan view mana yang ditampilkan.
+
+     MENGAPA COOKIE:
+       GAS HtmlService merender halaman dalam iframe sandbox di domain
+       script.googleusercontent.com. Pada lingkungan ini:
+         - localStorage  → diblokir (third-party storage policy)
+         - sessionStorage → dikosongkan setiap refresh (iframe baru)
+         - Cookie         → satu-satunya storage yang bertahan saat
+                            refresh selama tab tidak ditutup
+
+       Token disimpan sebagai cookie session (tanpa expires) sehingga
+       otomatis hilang ketika browser/tab ditutup. Ini perilaku yang
+       aman dan sesuai untuk session admin.
+
+     ALUR BOOT:
+       1. Baca token dari cookie
+       2a. Ada token  → apiCheckSession(token)
+             valid    → _bootApp(session)
+             invalid  → hapus cookie, _bootPublic()
+       2b. Tidak ada  → _bootPublic()
+  ========================================================== */
+
+  var TOKEN_KEY = "gas_admin_token";
+
+  // ── Cookie helpers ───────────────────────────────────────
+
+  function _setCookie(name, value) {
+    // Session cookie: tanpa expires → hilang saat browser/tab ditutup
+    document.cookie =
+      name +
+      "=" +
+      encodeURIComponent(value) +
+      "; path=/; SameSite=None; Secure";
+  }
+
+  function _getCookie(name) {
+    var match = document.cookie.match(
+      new RegExp("(?:^|; )" + name + "=([^;]*)"),
+    );
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function _deleteCookie(name) {
+    document.cookie =
+      name +
+      "=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure";
+  }
+
+  // ── State token global (dibaca ulang dari cookie tiap boot) ─
+
+  var _token = _getCookie(TOKEN_KEY);
+
+  // ── Boot sequence ────────────────────────────────────────
+
+  if (_token) {
+    _showLoading();
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res.success) {
+          _bootApp(res.session);
+        } else {
+          _deleteCookie(TOKEN_KEY);
+          _token = null;
+          _bootPublic();
+        }
+      })
+      .withFailureHandler(function () {
+        _deleteCookie(TOKEN_KEY);
+        _token = null;
+        _bootPublic();
+      })
+      .apiCheckSession(_token);
+  } else {
+    _bootPublic();
+  }
+
+  // ── View switchers ───────────────────────────────────────
+
+  function _showLoading() {
+    ["login-view", "register-view", "app-shell"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    });
+    document.body.style.background = "#f0f2f5";
+  }
+
+  function _bootPublic() {
+    document.body.className = "auth-bg";
+    var shell = document.getElementById("app-shell");
+    if (shell) shell.classList.add("hidden");
+    // Paksa flexbox untuk centering auth card
+    document.body.style.display = "flex";
+    document.body.style.alignItems = "center";
+    document.body.style.justifyContent = "center";
+    document.body.style.minHeight = "100vh";
+    document.getElementById("login-view").classList.remove("hidden");
+    document.getElementById("register-view").classList.add("hidden");
+  }
+
+  function _bootApp(session) {
+    document.body.className = "app-bg";
+    document.body.style.display = "";
+    document.getElementById("login-view").classList.add("hidden");
+    document.getElementById("register-view").classList.add("hidden");
+    var shell = document.getElementById("app-shell");
+    if (shell) {
+      shell.classList.remove("hidden");
+      shell.style.display = "flex";
+    }
+    _initAppUI(session);
+  }
+</script>
