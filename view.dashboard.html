@@ -1,0 +1,144 @@
+<!-- view.dashboard.html -->
+<!-- Layout utama aplikasi setelah login. Hanya dimuat di index.app.html -->
+
+<!-- ── Sidebar ─────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <h1>⚙️ Admin Panel</h1>
+    <p>Manajemen Sistem</p>
+  </div>
+
+  <nav class="sidebar__nav" id="sidebar-nav">
+    <div class="nav-section-label">Menu Utama</div>
+
+    <div
+      class="nav-item active"
+      data-page="dashboard"
+      onclick="navigateTo('dashboard')"
+    >
+      <span class="nav-item__icon">📊</span>
+      <span>Dashboard</span>
+    </div>
+
+    <div class="nav-item" data-page="users" onclick="navigateTo('users')">
+      <span class="nav-item__icon">👥</span>
+      <span>Pengguna</span>
+    </div>
+
+    <div class="nav-section-label" style="margin-top: 0.5rem">Pengaturan</div>
+
+    <div class="nav-item" data-page="settings" onclick="navigateTo('settings')">
+      <span class="nav-item__icon">⚙️</span>
+      <span>Pengaturan</span>
+    </div>
+  </nav>
+
+  <div class="sidebar__footer">
+    <div class="user-info">
+      <div class="user-info__avatar" id="user-avatar">A</div>
+      <div class="user-info__detail">
+        <div class="user-info__email" id="user-email">—</div>
+        <div class="user-info__role" id="user-role">—</div>
+      </div>
+    </div>
+    <button
+      class="btn btn-ghost"
+      style="width: 100%; font-size: 0.82rem"
+      onclick="handleLogout()"
+    >
+      🚪 Keluar
+    </button>
+  </div>
+</aside>
+
+<!-- ── Main Wrapper ────────────────────────────────── -->
+<div class="main-wrapper">
+  <!-- Topbar -->
+  <header class="topbar">
+    <span class="topbar__title" id="topbar-title">Dashboard</span>
+    <div class="topbar__actions">
+      <span
+        id="topbar-user"
+        style="font-size: 0.82rem; color: var(--color-text-muted)"
+      ></span>
+    </div>
+  </header>
+
+  <!-- Konten halaman -->
+  <main class="page-content">
+    <!-- PAGE: Dashboard -->
+    <div id="page-dashboard" class="page-view">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card__label">Total Pengguna</div>
+          <div class="stat-card__value" id="stat-users">—</div>
+          <div class="stat-card__sub">Terdaftar di sistem</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__label">Role Aktif</div>
+          <div class="stat-card__value" id="stat-role">—</div>
+          <div class="stat-card__sub">Role Anda saat ini</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__label">Status Sesi</div>
+          <div
+            class="stat-card__value"
+            style="font-size: 1.2rem; color: var(--color-success)"
+          >
+            ✔ Aktif
+          </div>
+          <div class="stat-card__sub">Sesi berlaku 8 jam</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">Selamat Datang</span>
+        </div>
+        <div class="card__body">
+          <p
+            style="
+              color: var(--color-text-muted);
+              font-size: 0.9rem;
+              line-height: 1.7;
+            "
+          >
+            Ini adalah halaman dashboard admin. Anda berhasil login dan sesi
+            Anda aktif. Gunakan menu di sidebar untuk navigasi. Tambahkan fitur
+            dan halaman baru sesuai kebutuhan aplikasi Anda.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: Users (placeholder) -->
+    <div id="page-users" class="page-view hidden">
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">👥 Manajemen Pengguna</span>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--color-text-muted); font-size: 0.9rem">
+            Halaman ini adalah placeholder. Tambahkan tabel daftar pengguna di
+            sini.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: Settings (placeholder) -->
+    <div id="page-settings" class="page-view hidden">
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">⚙️ Pengaturan</span>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--color-text-muted); font-size: 0.9rem">
+            Halaman ini adalah placeholder. Tambahkan form pengaturan sistem di
+            sini.
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>

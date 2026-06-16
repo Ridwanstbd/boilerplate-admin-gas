@@ -8,13 +8,14 @@ Dokumen ini adalah panduan teknis lengkap proyek **boilerplate-admin-gas** untuk
 
 1. [Gambaran Proyek](#1-gambaran-proyek)
 2. [Arsitektur & Struktur File](#2-arsitektur--struktur-file)
-3. [Tutorial Setup dari Nol](#3-tutorial-setup-dari-nol)
-4. [Alur Kerja Database](#4-alur-kerja-database)
-5. [Alur Autentikasi](#5-alur-autentikasi)
-6. [Konvensi Kode](#6-konvensi-kode)
-7. [Menambah Fitur Baru](#7-menambah-fitur-baru)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Batasan & Catatan GAS](#9-batasan--catatan-gas)
+3. [Sistem Middleware Auth](#3-sistem-middleware-auth)
+4. [Tutorial Setup dari Nol](#4-tutorial-setup-dari-nol)
+5. [Alur Kerja Database](#5-alur-kerja-database)
+6. [Alur Autentikasi](#6-alur-autentikasi)
+7. [Konvensi Kode](#7-konvensi-kode)
+8. [Menambah Fitur Baru](#8-menambah-fitur-baru)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Batasan & Catatan GAS](#10-batasan--catatan-gas)
 
 ---
 
@@ -29,73 +30,193 @@ Tidak ada server eksternal, tidak ada biaya hosting. Semua berjalan di infrastru
 - **Runtime:** Google Apps Script V8 (JavaScript ES6+)
 - **Database:** Google Spreadsheet (setiap sheet = satu tabel)
 - **Frontend:** HTML + CSS + JavaScript vanilla (disajikan via `HtmlService`)
+- **Session:** `PropertiesService.getUserProperties()` sebagai penyimpanan session server-side
 - **Keamanan:** SHA-256 hashing via `Utilities.computeDigest`
 - **Deploy Tool:** `clasp` (Google's CLI untuk GAS)
 
 **Kapabilitas Saat Ini:**
 
-- Login admin dengan validasi kredensial
-- Registrasi admin baru dengan validasi password ketat
-- Hashing password sebelum disimpan (tidak ada plain-text)
+- Proteksi route server-side: `doGet()` menentukan halaman yang dirender berdasarkan status session
+- Verifikasi session dua lapis: server (doGet) + client (DOMContentLoaded)
+- Middleware auth dengan dukungan role-based access control (RBAC)
+- Session otomatis kedaluwarsa setelah 8 jam
+- Login, registrasi admin, logout dengan redirect aman
+- Hashing password SHA-256 (tidak ada plain-text yang tersimpan)
 - Migrasi dan seeding database otomatis
-- Navigasi multi-view (login / register / dashboard) tanpa reload halaman
 
 ---
 
 ## 2. Arsitektur & Struktur File
 
-Proyek mengikuti pola **MVC yang diadaptasi** untuk lingkungan GAS. Semua file `.gs` berjalan dalam satu scope global, sehingga urutan pemuatan file penting.
-
 ```
 boilerplate-admin-gas/
 │
-├── Backend (.gs) ─────────────────────────────────
-│   ├── app.controller.gs      # Entry point: doGet(), include()
-│   ├── auth.controller.gs     # API bridge: dipanggil google.script.run
-│   ├── auth.service.gs        # Business logic: register, login
-│   ├── user.repository.gs     # Data access: baca/tulis sheet Users
-│   ├── utils.crypto.gs        # Utility: SHA-256, validasi password
-│   └── setup.database.gs      # Migrasi & seeder schema database
+├── Backend (.gs) ─────────────────────────────────────────────
+│   ├── middleware.auth.gs     ← BARU: session create/destroy/guard
+│   ├── app.controller.gs      ← Entry point: doGet() dengan route guard
+│   ├── app.helper.gs          ← BARU: getWebAppUrl() untuk client redirect
+│   ├── auth.controller.gs     ← API bridge: login, register, logout, checkSession
+│   ├── auth.service.gs        ← Business logic: login sekarang buat session
+│   ├── user.repository.gs     ← Data access: baca/tulis sheet Users
+│   ├── utils.crypto.gs        ← SHA-256, validasi kekuatan password
+│   └── setup.database.gs      ← Migrasi & seeder schema database
 │
-├── Frontend (.html) ──────────────────────────────
-│   ├── index.html             # Kerangka utama, memanggil include()
-│   ├── styles.html            # Semua CSS (dimuat via scriptlet)
-│   ├── scripts.html           # Semua JS client-side
-│   └── view.login.html        # Semua view: login, register, dashboard
+├── Frontend — Halaman Publik (belum login) ───────────────────
+│   ├── index.public.html      ← BARU: shell untuk halaman login/register
+│   ├── view.login.html        ← Form login (dipisah dari register)
+│   ├── view.register.html     ← BARU: form register (file terpisah)
+│   ├── styles.auth.html       ← BARU: CSS khusus halaman auth
+│   └── scripts.auth.html      ← BARU: JS login, register, switchAuthView
 │
-└── Config ────────────────────────────────────────
-    └── appsscript.json        # Konfigurasi runtime, timezone, akses
+├── Frontend — Halaman App (sudah login) ──────────────────────
+│   ├── index.app.html         ← BARU: shell untuk halaman dalam app
+│   ├── view.dashboard.html    ← BARU: layout sidebar + dashboard + placeholder pages
+│   ├── styles.app.html        ← BARU: CSS sidebar, topbar, card, stats
+│   └── scripts.app.html       ← BARU: JS navigasi, verifikasi session, logout
+│
+├── Shared ─────────────────────────────────────────────────────
+│   └── styles.base.html       ← BARU: CSS variables, reset, utility classes
+│
+└── Config ─────────────────────────────────────────────────────
+    └── appsscript.json        ← Runtime V8, timezone, akses web app
 ```
 
-### Alur Data (Request Lifecycle)
+### Alur Request Lifecycle
 
 ```
-Browser (User)
-    │
-    ▼
-index.html          ← doGet() merender template ini
-    │
-    ├── styles.html   (dimuat via <?!= include('styles'); ?>)
-    ├── view.login.html (dimuat via <?!= include('view.login'); ?>)
-    └── scripts.html  (dimuat via <?!= include('scripts'); ?>)
-         │
-         │  google.script.run.apiLoginUser(email, pass)
-         ▼
-auth.controller.gs   ← Menerima panggilan dari frontend
-         │
-         ▼
-auth.service.gs      ← Validasi logika bisnis
-         │
-         ▼
-user.repository.gs   ← Baca/tulis Google Spreadsheet
-         │
-         ▼
-Google Spreadsheet   ← Database (sheet "Users")
+Browser mengakses URL Web App
+          │
+          ▼
+   app.controller.gs
+   doGet()
+          │
+          ├─ AuthMiddleware.requireAuth()
+          │       │
+          │       ├─ PropertiesService.getUserProperties()
+          │       ├─ Cek keberadaan session key
+          │       └─ Cek expiry (8 jam)
+          │
+          ├─ Session VALID?
+          │       ├─ YA  → render index.app.html  (dashboard)
+          │       └─ TIDAK → render index.public.html (login)
+          │
+          ▼
+   HtmlService merender template
+   (include() menyisipkan styles + views + scripts)
+          │
+          ▼
+   Browser menerima HTML lengkap
+          │
+          ├─ Jika index.app.html:
+          │     DOMContentLoaded → apiCheckSession()
+          │     Session tidak valid → redirect ke URL web app
+          │
+          └─ Jika index.public.html:
+                User mengisi form → google.script.run.apiLoginUser()
+                Login berhasil → AuthMiddleware.createSession()
+                               → redirect ke URL web app
+                               → doGet() sekarang render index.app.html
 ```
 
 ---
 
-## 3. Tutorial Setup dari Nol
+## 3. Sistem Middleware Auth
+
+### File: `middleware.auth.gs`
+
+Middleware menggunakan **IIFE (Immediately Invoked Function Expression)** untuk enkapsulasi, mengekspos hanya public API yang diperlukan.
+
+```javascript
+var AuthMiddleware = (function () {
+  // Semua implementasi tersembunyi di dalam closure
+  // ...
+  return { createSession, destroySession, getSession, requireAuth, requireRole };
+})();
+```
+
+### Session Storage
+
+Session disimpan di `PropertiesService.getUserProperties()` — penyimpanan key-value per akun Google yang menjalankan script. Data bersifat persisten hingga dihapus secara eksplisit atau kedaluwarsa.
+
+| Key | Isi |
+|-----|-----|
+| `session_email` | Email user yang login |
+| `session_role` | Role user (`"admin"`, dll.) |
+| `session_created_at` | Timestamp Unix saat login (milidetik) |
+
+### Durasi Session
+
+Session berlaku **8 jam** sejak login. Setiap pemanggilan `requireAuth()` atau `getSession()` mengecek selisih waktu antara `session_created_at` dan waktu saat ini. Jika melebihi 8 jam, session dihapus otomatis dan mengembalikan `null`.
+
+Untuk mengubah durasi, edit konstanta di `middleware.auth.gs`:
+
+```javascript
+var SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // ganti angka pertama (8 = jam)
+```
+
+### Public API Middleware
+
+```javascript
+// Buat session baru setelah login berhasil
+AuthMiddleware.createSession(email, role)
+
+// Hapus session saat logout
+AuthMiddleware.destroySession()
+
+// Ambil data session. Return null jika tidak ada atau kedaluwarsa
+AuthMiddleware.getSession()
+// → { email: string, role: string } | null
+
+// Guard: pastikan user sudah login
+AuthMiddleware.requireAuth()
+// → { authorized: true, session: {...} }
+// → { authorized: false, message: "..." }
+
+// Guard: pastikan user login DAN memiliki role tertentu
+AuthMiddleware.requireRole("admin")
+AuthMiddleware.requireRole(["admin", "superadmin"])
+// → { authorized: true, session: {...} }
+// → { authorized: false, message: "Akses ditolak..." }
+```
+
+### Penggunaan di Controller
+
+Setiap controller yang mengakses data sensitif harus memanggil guard sebelum melakukan operasi:
+
+```javascript
+function apiGetSensitiveData() {
+  try {
+    // Guard: hanya user yang login
+    var auth = AuthMiddleware.requireAuth();
+    if (!auth.authorized) {
+      return { success: false, message: auth.message };
+    }
+
+    // Guard: hanya role tertentu
+    var roleCheck = AuthMiddleware.requireRole(["admin", "superadmin"]);
+    if (!roleCheck.authorized) {
+      return { success: false, message: roleCheck.message };
+    }
+
+    // Aman untuk dilanjutkan
+    return { success: true, data: getSomeData() };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+```
+
+### Proteksi Dua Lapis
+
+Sistem menggunakan dua lapisan proteksi yang saling melengkapi:
+
+**Lapis 1 — Server (`doGet`):** User yang belum login tidak pernah menerima HTML halaman app. `doGet()` selalu memeriksa session sebelum menentukan template yang dikirim ke browser. Ini mencegah akses langsung ke URL web app.
+
+**Lapis 2 — Client (`DOMContentLoaded`):** Saat `index.app.html` dimuat, `scripts.app.html` langsung memanggil `apiCheckSession()`. Jika session ternyata sudah kedaluwarsa di tengah sesi browsing (misalnya tab dibiarkan terbuka lama), user otomatis diredirect ke halaman login.
+
+---
+
+## 4. Tutorial Setup dari Nol
 
 ### Prasyarat
 
@@ -134,7 +255,6 @@ https://script.google.com/home/projects/SCRIPT_ID_ADA_DI_SINI/edit
 ### Langkah 4 — Clone & Hubungkan Proyek
 
 ```bash
-# Clone repo
 git clone https://github.com/Ridwanstbd/boilerplate-admin-gas.git
 cd boilerplate-admin-gas
 
@@ -156,45 +276,40 @@ Di GAS editor:
 
 1. Pilih fungsi `runMigrate` dari dropdown di toolbar
 2. Klik tombol **▶ Run**
-3. Beri izin akses saat diminta (klik **Review Permissions > Allow**)
+3. Beri izin akses saat diminta: klik **Review Permissions → Allow**
 4. Cek tab **Execution Log** — harus muncul: `[MIGRATE] Tabel 'Users' berhasil dibuat.`
 
-Setelah migrate, jalankan seeder untuk data awal:
+Kemudian jalankan seeder:
 
-1. Pilih fungsi `runSeeder` dari dropdown
-2. Klik **▶ Run**
-3. Log harus muncul: `[SEED] Berhasil menambahkan data dummy ke tabel 'Users'.`
+1. Pilih fungsi `runSeeder` → klik **▶ Run**
+2. Log harus muncul: `[SEED] Berhasil menambahkan data dummy ke tabel 'Users'.`
 
-> **Kredensial default seeder:** `admin@example.com` / `Admin123!`
+> **Kredensial default:** `admin@example.com` / `Admin123!`
 > Ganti password ini segera setelah deploy pertama.
 
 ### Langkah 7 — Deploy sebagai Web App
 
 Di GAS editor:
 
-1. Klik **Deploy > New deployment**
+1. Klik **Deploy → New deployment**
 2. Pilih type: **Web app**
-3. Isi deskripsi (misal: `v1.0.0`)
-4. **Execute as:** `Me` (akun yang memiliki spreadsheet)
-5. **Who has access:** sesuai kebutuhan (`Anyone` untuk akses publik)
-6. Klik **Deploy**
-7. Salin **Web App URL** yang diberikan
+3. **Execute as:** `Me` (akun yang memiliki spreadsheet)
+4. **Who has access:** sesuaikan kebutuhan (`Anyone` untuk publik)
+5. Klik **Deploy** → salin **Web App URL**
 
-Buka URL tersebut di browser — halaman login akan tampil.
+Buka URL tersebut. Jika belum ada session aktif → halaman login tampil. Setelah login berhasil → redirect otomatis ke halaman dashboard.
 
 ### Langkah 8 — Update Kode (Iterasi Berikutnya)
 
 ```bash
-# Edit kode lokal, lalu push
 clasp push
-
-# Untuk melihat perubahan live, buat deployment baru atau gunakan @HEAD URL
-# URL @HEAD: https://script.google.com/macros/s/SCRIPT_ID/dev
+# Untuk testing gunakan URL /dev (selalu kode terbaru, hanya pemilik)
+# Untuk production buat New Deployment baru
 ```
 
 ---
 
-## 4. Alur Kerja Database
+## 5. Alur Kerja Database
 
 ### Schema Saat Ini
 
@@ -214,196 +329,211 @@ Edit property `this.schema` di constructor `DatabaseMigration` pada `setup.datab
 
 ```javascript
 this.schema = {
-  Users: ["ID", "Email", "PasswordHash", "Role", "Created_At"],
-
-  // Tambahkan tabel baru di sini:
-  Products: ["ID", "Name", "Price", "Stock", "Created_At"],
+  Users:    ["ID", "Email", "PasswordHash", "Role", "Created_At"],
+  Products: ["ID", "Name", "Price", "Stock", "Created_At"], // tambahkan di sini
 };
 ```
 
-Setelah disimpan dan di-push, jalankan `runMigrate()` lagi. Fungsi migrate bersifat **idempotent** — sheet yang sudah ada tidak akan dihapus, hanya kolom yang kurang yang ditambahkan.
+Jalankan `runMigrate()` lagi — sheet yang sudah ada tidak terhapus, hanya kolom baru yang ditambahkan.
 
 ### Fungsi Database yang Tersedia
 
 ```javascript
-runMigrate()          // Buat sheet baru sesuai schema (aman, tidak hapus data)
-runSeeder()           // Isi data awal (hanya jalan jika sheet masih kosong)
-runRefreshAndSeed()   // Reset total + migrate + seed (HAPUS SEMUA DATA!)
+runMigrate()              // Buat sheet baru sesuai schema (aman, tidak hapus data)
+runSeeder()               // Isi data awal (hanya jalan jika sheet kosong)
+runRefreshAndSeed()       // Reset total + migrate + seed (⚠️ HAPUS SEMUA DATA)
 runRollbackSpecificTable() // Hapus satu tabel (default: "Users")
 ```
 
-> ⚠️ **Hati-hati:** `runRefreshAndSeed()` menghapus seluruh data. Jangan jalankan di production.
-
 ---
 
-## 5. Alur Autentikasi
+## 6. Alur Autentikasi
 
 ### Registrasi
 
 ```
-Frontend (handleRegister)
-    │  google.script.run.apiRegisterAdmin(email, pass)
-    ▼
-auth.controller.gs → apiRegisterAdmin()
-    ▼
-auth.service.gs → register()
-    ├── Validasi kekuatan password (regex)
-    ├── Cek duplikasi email (findByEmail)
-    ├── Hash password (CryptoUtils.hashSHA256)
-    └── Simpan user baru (userRepo.create)
-    ▼
-user.repository.gs → create()
-    └── sheet.appendRow([id, email, hash, role, createdAt])
+handleRegister() di browser
+  → validasi konfirmasi password (client)
+  → google.script.run.apiRegisterAdmin(email, pass)
+      → AuthService.register()
+          → CryptoUtils.isPasswordStrong()  [validasi regex]
+          → UserRepository.findByEmail()    [cek duplikasi]
+          → CryptoUtils.hashSHA256(pass)    [hash password]
+          → UserRepository.create()         [simpan ke sheet]
+      → { success: true, message }
+  → tampil pesan sukses → switchAuthView('login-view')
 ```
 
 ### Login
 
 ```
-Frontend (handleLogin)
-    │  google.script.run.apiLoginUser(email, pass)
-    ▼
-auth.controller.gs → apiLoginUser()
-    ▼
-auth.service.gs → login()
-    ├── Cari user by email (findByEmail)
-    ├── Hash input password
-    └── Bandingkan hash (string comparison)
-    ▼
-Respons: { success: true, email, role } atau { success: false, message }
+handleLogin() di browser
+  → google.script.run.apiLoginUser(email, pass)
+      → AuthService.login()
+          → UserRepository.findByEmail()    [cari user]
+          → CryptoUtils.hashSHA256(pass)    [hash input]
+          → bandingkan hash                 [validasi]
+          → AuthMiddleware.createSession()  [simpan session]
+      → { success: true, email, role }
+  → google.script.run.getWebAppUrl()
+  → window.top.location.href = url          [reload → doGet]
+      → AuthMiddleware.requireAuth()        [session valid]
+      → render index.app.html
+```
+
+### Logout
+
+```
+handleLogout() di browser
+  → google.script.run.apiLogout()
+      → AuthService.logout()
+          → AuthMiddleware.destroySession() [hapus session]
+      → { success: true }
+  → google.script.run.getWebAppUrl()
+  → window.top.location.href = url          [reload → doGet]
+      → AuthMiddleware.requireAuth()        [session null]
+      → render index.public.html            [kembali ke login]
 ```
 
 ### Aturan Validasi Password
 
-Password harus memenuhi semua syarat berikut (divalidasi di `utils.crypto.gs`):
+Password harus memenuhi semua syarat (divalidasi di `utils.crypto.gs`):
 
 - Minimal 8 karakter
-- Mengandung minimal 1 huruf kecil (`a-z`)
-- Mengandung minimal 1 huruf besar (`A-Z`)
-- Mengandung minimal 1 angka (`0-9`)
-- Mengandung minimal 1 simbol dari set: `@$!%*?&#`
-
-Contoh password valid: `Admin123!`, `Secure@2025`, `P@ssw0rd`
+- Minimal 1 huruf kecil (`a-z`)
+- Minimal 1 huruf besar (`A-Z`)
+- Minimal 1 angka (`0-9`)
+- Minimal 1 simbol dari set: `@$!%*?&#`
 
 ---
 
-## 6. Konvensi Kode
+## 7. Konvensi Kode
 
 ### Penamaan File
 
 | Tipe | Pola | Contoh |
 |------|------|--------|
+| Middleware | `middleware.[nama].gs` | `middleware.auth.gs` |
 | Controller | `[domain].controller.gs` | `auth.controller.gs` |
 | Service | `[domain].service.gs` | `auth.service.gs` |
 | Repository | `[domain].repository.gs` | `user.repository.gs` |
 | Utility | `utils.[nama].gs` | `utils.crypto.gs` |
-| View | `view.[nama].html` | `view.login.html` |
-| Setup | `setup.[nama].gs` | `setup.database.gs` |
+| Helper (app-level) | `app.[nama].gs` | `app.helper.gs` |
+| Shell publik | `index.public.html` | — |
+| Shell app | `index.app.html` | — |
+| View (auth) | `view.[nama].html` | `view.login.html` |
+| View (app) | `view.[nama].html` | `view.dashboard.html` |
+| Style shared | `styles.base.html` | — |
+| Style per-konteks | `styles.[konteks].html` | `styles.auth.html`, `styles.app.html` |
+| Script per-konteks | `scripts.[konteks].html` | `scripts.auth.html`, `scripts.app.html` |
 
-### Pola Controller (API Bridge)
+### Pola Controller dengan Guard
 
-Semua fungsi yang dipanggil via `google.script.run` dari frontend harus:
-
-1. Berada di file `*.controller.gs`
-2. Dibungkus `try/catch`
-3. Selalu mengembalikan objek `{ success: boolean, message: string, ...data }`
+Semua controller yang mengakses data di balik login harus memanggil guard di baris pertama:
 
 ```javascript
-function apiNamaFungsi(param1, param2) {
+function apiContohDilindungi() {
   try {
-    const service = new NamaService();
-    return service.namaMethod(param1, param2);
-  } catch (error) {
-    return { success: false, message: error.message };
+    var auth = AuthMiddleware.requireAuth();
+    if (!auth.authorized) return { success: false, message: auth.message };
+
+    // Aksi yang dilindungi di sini
+    return { success: true, data: getSesuatu() };
+  } catch (e) {
+    return { success: false, message: e.message };
   }
 }
+```
+
+### Pola Middleware IIFE
+
+Middleware ditulis sebagai IIFE untuk menghindari polusi scope global GAS:
+
+```javascript
+var NamaMiddleware = (function () {
+  // Variabel privat — tidak bisa diakses dari luar
+  var _privateVar = "nilai";
+
+  function _privateHelper() { /* ... */ }
+
+  function publicMethod() {
+    return _privateHelper();
+  }
+
+  return { publicMethod };
+})();
 ```
 
 ### Pola Repository
 
-Setiap repository menangani satu sheet/tabel dan mengekspos method CRUD standar:
-
 ```javascript
 class NamaRepository {
   constructor() {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw new Error("Spreadsheet tidak ditemukan.");
     this.sheet = ss.getSheetByName("NamaTabel");
+    if (!this.sheet) throw new Error("Tabel 'NamaTabel' belum dibuat. Jalankan runMigrate().");
   }
-
-  findAll()           // Ambil semua baris
-  findById(id)        // Cari berdasarkan kolom ID
-  findByField(field, value) // Cari berdasarkan nilai kolom tertentu
-  create(data)        // Tambah baris baru
-  update(id, data)    // Update baris berdasarkan ID
-  delete(id)          // Hapus baris berdasarkan ID
+  findAll()         { /* ambil semua baris */ }
+  findById(id)      { /* cari by kolom ID */ }
+  create(data)      { /* appendRow */ }
+  update(id, data)  { /* cari row lalu setValue */ }
+  delete(id)        { /* cari row lalu deleteRow */ }
 }
 ```
 
-### Pola Frontend (google.script.run)
-
-Selalu sertakan `withFailureHandler` untuk menangkap error jaringan atau runtime:
+### Pola Frontend Client-Side
 
 ```javascript
+// Selalu sertakan withFailureHandler
 google.script.run
-  .withSuccessHandler(function(response) {
-    if (response.success) {
-      // handle sukses
-    } else {
-      // handle error logika bisnis
-      showMessage(response.message, "red");
-    }
+  .withSuccessHandler(function (res) {
+    if (res.success) { /* handle sukses */ }
+    else             { _setMsg("msg-id", res.message, "error"); }
   })
-  .withFailureHandler(function(err) {
-    // handle error teknis (timeout, crash, dll)
-    showMessage("Terjadi kesalahan: " + err.message, "red");
+  .withFailureHandler(function (err) {
+    _setMsg("msg-id", "Kesalahan teknis: " + err.message, "error");
   })
-  .namaFungsiController(param1, param2);
+  .namaFungsiController(param);
 ```
 
 ---
 
-## 7. Menambah Fitur Baru
+## 8. Menambah Fitur Baru
 
-### Contoh: Menambah Fitur CRUD Produk
+### Contoh: Menambah Halaman Produk
 
-#### Langkah 1 — Tambah Schema di `setup.database.gs`
+#### Langkah 1 — Tambah schema di `setup.database.gs`
 
 ```javascript
 this.schema = {
-  Users: ["ID", "Email", "PasswordHash", "Role", "Created_At"],
-  Products: ["ID", "Name", "Price", "Stock", "Created_At"], // ← tambahkan ini
+  Users:    ["ID", "Email", "PasswordHash", "Role", "Created_At"],
+  Products: ["ID", "Name", "Price", "Stock", "Created_At"],
 };
 ```
 
-Jalankan `runMigrate()` di GAS editor.
+Jalankan `runMigrate()`.
 
 #### Langkah 2 — Buat `product.repository.gs`
 
 ```javascript
 class ProductRepository {
   constructor() {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw new Error("Spreadsheet tidak ditemukan.");
     this.sheet = ss.getSheetByName("Products");
-    if (!this.sheet) throw new Error("Tabel 'Products' belum dibuat. Jalankan runMigrate().");
+    if (!this.sheet) throw new Error("Tabel 'Products' belum dibuat.");
   }
 
   findAll() {
-    const data = this.sheet.getDataRange().getValues();
-    return data.slice(1).map(row => ({
-      id: row[0], name: row[1], price: row[2],
-      stock: row[3], createdAt: row[4]
-    }));
+    return this.sheet.getDataRange().getValues().slice(1)
+      .map(function (r) {
+        return { id: r[0], name: r[1], price: r[2], stock: r[3] };
+      });
   }
 
-  create(product) {
-    this.sheet.appendRow([
-      Utilities.getUuid(),
-      product.name,
-      product.price,
-      product.stock,
-      new Date()
-    ]);
+  create(p) {
+    this.sheet.appendRow([Utilities.getUuid(), p.name, p.price, p.stock, new Date()]);
   }
 }
 ```
@@ -412,158 +542,174 @@ class ProductRepository {
 
 ```javascript
 class ProductService {
-  constructor() {
-    this.repo = new ProductRepository();
-  }
+  constructor() { this.repo = new ProductRepository(); }
 
-  getAllProducts() {
-    return { success: true, data: this.repo.findAll() };
-  }
-
-  createProduct(name, price, stock) {
-    if (!name || !price) {
-      return { success: false, message: "Nama dan harga wajib diisi." };
-    }
-    this.repo.create({ name, price: parseFloat(price), stock: parseInt(stock) });
-    return { success: true, message: "Produk berhasil ditambahkan." };
+  getAll()               { return { success: true, data: this.repo.findAll() }; }
+  create(name, price, stock) {
+    if (!name || !price) return { success: false, message: "Nama dan harga wajib diisi." };
+    this.repo.create({ name, price: parseFloat(price), stock: parseInt(stock) || 0 });
+    return { success: true, message: "Produk ditambahkan." };
   }
 }
 ```
 
-#### Langkah 4 — Tambah di `product.controller.gs` (buat file baru)
+#### Langkah 4 — Buat `product.controller.gs`
 
 ```javascript
-function apiGetAllProducts() {
+function apiGetProducts() {
   try {
-    return new ProductService().getAllProducts();
-  } catch (e) {
-    return { success: false, message: e.message };
-  }
+    var auth = AuthMiddleware.requireAuth();           // ← wajib ada
+    if (!auth.authorized) return { success: false, message: auth.message };
+    return new ProductService().getAll();
+  } catch (e) { return { success: false, message: e.message }; }
 }
 
 function apiCreateProduct(name, price, stock) {
   try {
-    return new ProductService().createProduct(name, price, stock);
-  } catch (e) {
-    return { success: false, message: e.message };
-  }
+    var auth = AuthMiddleware.requireAuth();           // ← wajib ada
+    if (!auth.authorized) return { success: false, message: auth.message };
+    return new ProductService().create(name, price, stock);
+  } catch (e) { return { success: false, message: e.message }; }
 }
 ```
 
-#### Langkah 5 — Buat View di `view.dashboard.html` (atau tambahkan ke file yang ada)
+#### Langkah 5 — Tambah nav item di `view.dashboard.html`
 
 ```html
-<div id="products-section">
-  <h3>Daftar Produk</h3>
-  <button onclick="loadProducts()">Refresh</button>
-  <div id="products-list"></div>
+<div class="nav-item" data-page="products" onclick="navigateTo('products')">
+  <span class="nav-item__icon">📦</span>
+  <span>Produk</span>
 </div>
 ```
 
-#### Langkah 6 — Tambah handler di `scripts.html`
+#### Langkah 6 — Tambah page di `view.dashboard.html`
+
+```html
+<div id="page-products" class="page-view hidden">
+  <div class="card">
+    <div class="card__header">
+      <span class="card__title">📦 Produk</span>
+      <button class="btn btn-primary" style="width:auto" onclick="loadProducts()">
+        + Tambah
+      </button>
+    </div>
+    <div class="card__body" id="products-container">
+      <p style="color:var(--color-text-muted)">Memuat...</p>
+    </div>
+  </div>
+</div>
+```
+
+#### Langkah 7 — Tambah handler di `scripts.app.html`
 
 ```javascript
 function loadProducts() {
   google.script.run
-    .withSuccessHandler(function(response) {
-      if (response.success) {
-        const list = document.getElementById("products-list");
-        list.innerHTML = response.data
-          .map(p => `<p>${p.name} - Rp${p.price}</p>`)
-          .join("");
-      }
+    .withSuccessHandler(function (res) {
+      var container = document.getElementById("products-container");
+      if (!res.success) { container.innerHTML = "<p>" + res.message + "</p>"; return; }
+      container.innerHTML = res.data.length
+        ? res.data.map(function (p) {
+            return "<p><strong>" + p.name + "</strong> — Rp" + p.price + "</p>";
+          }).join("")
+        : "<p style='color:var(--color-text-muted)'>Belum ada produk.</p>";
     })
-    .withFailureHandler(function(err) {
-      console.error(err.message);
-    })
-    .apiGetAllProducts();
+    .withFailureHandler(function (err) { console.error(err.message); })
+    .apiGetProducts();
 }
 ```
 
----
-
-## 8. Troubleshooting
-
-### Error: "An unknown error has occurred"
-
-**Penyebab paling umum:** Script dijalankan dari Standalone Script, bukan dari Sheet yang terikat.
-
-**Solusi:**
-1. Buka Google Sheet yang menjadi database
-2. Klik **Extensions > Apps Script**
-3. Jalankan fungsi dari sana, bukan dari `script.google.com/home`
-
-### Error: "Tabel 'Users' belum dibuat"
-
-Jalankan `runMigrate()` terlebih dahulu sebelum `runSeeder()` atau menggunakan aplikasi.
-
-### Error: "You do not have permission"
-
-Saat pertama kali menjalankan fungsi GAS yang mengakses Spreadsheet, Google meminta izin. Klik **Review Permissions > pilih akun > Allow**.
-
-### Perubahan Kode Tidak Terlihat di Web App
-
-Deployment GAS bersifat snapshot. Setelah `clasp push`:
-- Untuk **testing**: gunakan URL `…/dev` (selalu pakai kode terbaru, hanya bisa diakses oleh pemilik)
-- Untuk **production**: buat **New Deployment** baru di menu **Deploy**
-
-### Error: "Cannot read properties of null"
-
-Terjadi jika `getSheetByName()` mengembalikan `null` — artinya sheet belum dibuat. Jalankan `runMigrate()`.
-
-### Seeder Tidak Jalan (Log: SKIP)
-
-Seeder hanya berjalan jika sheet **kosong** (hanya ada header). Jika sheet sudah ada data, seeder dilewati untuk mencegah duplikasi. Untuk reset total, jalankan `runRefreshAndSeed()` — tapi ini **menghapus semua data**.
-
----
-
-## 9. Batasan & Catatan GAS
-
-### Scope Global
-
-Semua file `.gs` berbagi satu scope global. Urutan pemuatan file tidak dijamin, jadi **hindari memanggil fungsi di level atas file** (di luar class atau function). Deklarasi `class` dan `function` aman karena di-hoist.
-
-### Tidak Ada Session / Cookie Asli
-
-GAS `HtmlService` tidak mendukung session server-side. Untuk state login, gunakan `PropertiesService` (per-user properties) atau `CacheService` sebagai alternatif sederhana.
-
-Contoh menyimpan state login sederhana:
+#### Langkah 8 — Daftarkan page title di `navigateTo()` (`scripts.app.html`)
 
 ```javascript
-// Simpan session setelah login berhasil
-function setUserSession(email, role) {
-  PropertiesService.getUserProperties().setProperties({
-    loggedInEmail: email,
-    loggedInRole: role,
-    loginTime: new Date().toISOString()
-  });
-}
-
-// Cek session
-function getSession() {
-  const props = PropertiesService.getUserProperties().getProperties();
-  return props.loggedInEmail ? { email: props.loggedInEmail, role: props.loggedInRole } : null;
-}
+var titles = {
+  dashboard: "Dashboard",
+  users:     "Manajemen Pengguna",
+  products:  "Produk",       // ← tambahkan ini
+  settings:  "Pengaturan",
+};
 ```
+
+---
+
+## 9. Troubleshooting
+
+### Error: "An unknown error has occurred" saat `runMigrate`
+
+Script dijalankan dari Standalone Script, bukan dari dalam Google Sheet.
+
+**Solusi:** Buka Google Sheet → **Extensions → Apps Script** → jalankan dari sana.
+
+### Halaman login terus muncul setelah login berhasil
+
+`PropertiesService` menyimpan session per user Google. Jika script dikonfigurasi `executeAs: USER_ACCESSING` (bukan `USER_DEPLOYING`), setiap user punya storage sendiri — ini perilaku yang benar.
+
+Jika masalah terjadi untuk pemilik script sendiri, cek apakah `getWebAppUrl()` mengembalikan URL yang benar (bukan URL editor `/edit`).
+
+### Error: "Cannot read properties of null" di repository
+
+Sheet belum dibuat. Jalankan `runMigrate()` terlebih dahulu.
+
+### Seeder tidak jalan (log: SKIP)
+
+Seeder hanya berjalan jika sheet kosong (hanya header). Untuk reset total jalankan `runRefreshAndSeed()` — **ini menghapus semua data**.
+
+### Perubahan tidak terlihat di web app
+
+GAS deployment bersifat snapshot. Setelah `clasp push`:
+- Testing: gunakan URL `…/dev` (selalu kode terbaru, hanya pemilik)
+- Production: buat **New Deployment** baru
+
+### Session tidak tersimpan antar request
+
+`PropertiesService.getUserProperties()` bersifat per-user Google. Pastikan `executeAs` di `appsscript.json` di-set ke `USER_DEPLOYING` agar semua user berbagi storage yang sama (penyederhanaan), atau `USER_ACCESSING` agar tiap user punya session sendiri (lebih aman untuk multi-user).
+
+---
+
+## 10. Batasan & Catatan GAS
+
+### Scope Global dan Urutan File
+
+Semua file `.gs` berbagi satu scope global. Middleware ditulis sebagai IIFE (`var AuthMiddleware = (function(){...})()`) sehingga variabel internalnya tersembunyi, namun `AuthMiddleware` itu sendiri tersedia secara global. Hindari variabel di level atas file.
+
+### PropertiesService: getUserProperties vs getScriptProperties
+
+| | `getUserProperties` | `getScriptProperties` |
+|---|---|---|
+| Scope | Per user Google | Seluruh script (shared) |
+| Kapasitas | 500 KB per user | 500 KB total |
+| Digunakan untuk | Session per-user | Config global (API keys, dll.) |
+
+Boilerplate ini menggunakan `getUserProperties` untuk session agar tiap akun Google memiliki session yang terisolasi.
+
+### Tidak Ada Cookie atau JWT Asli
+
+GAS `HtmlService` tidak mendukung cookie browser atau header HTTP kustom. Session diimplementasikan sepenuhnya via `PropertiesService` di sisi server.
+
+### Redirect Setelah Login/Logout
+
+GAS tidak mendukung server-side redirect (`302 Found`). Redirect dilakukan dari client dengan memanggil `getWebAppUrl()` lalu menetapkan `window.top.location.href`. Ini memaksa browser melakukan request baru ke `doGet()` dengan session yang sudah diperbarui.
 
 ### Batas Eksekusi
 
 | Batasan | Nilai |
 |---------|-------|
 | Waktu eksekusi per fungsi | 6 menit |
-| Quota baca/tulis Spreadsheet | 20.000 baris/detik |
-| Ukuran maksimal response HtmlService | ~50 MB |
-| Jumlah panggilan `google.script.run` bersamaan | Tidak ada batas resmi, tapi hindari race condition |
+| PropertiesService total | 500 KB per user |
+| Jumlah properti | 500 properti per store |
+| Quota baca/tulis Spreadsheet | ~20.000 operasi/hari (akun gratis) |
 
-### Pengembangan Lokal dengan `clasp`
+### Perintah clasp Berguna
 
 ```bash
-clasp pull   # Tarik kode terbaru dari GAS ke lokal
-clasp push   # Dorong kode lokal ke GAS
-clasp open   # Buka GAS editor di browser
-clasp logs   # Lihat Stackdriver logs
+clasp pull          # Tarik kode terbaru dari GAS ke lokal
+clasp push          # Dorong kode lokal ke GAS
+clasp push --watch  # Auto-push saat file berubah
+clasp open          # Buka GAS editor di browser
+clasp logs          # Lihat Stackdriver logs
+clasp deployments   # Lihat daftar deployment
 ```
 
 ---
 
-*Dokumen ini dihasilkan berdasarkan analisis kode proyek boilerplate-admin-gas dan diperbaharui setelah perbaikan bug pada sesi development.*
+*Dokumen ini mencakup versi dengan middleware autentikasi server-side dan pemisahan struktur halaman publik/app.*

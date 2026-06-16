@@ -1,3 +1,9 @@
+/**
+ * auth.service.gs
+ * Business logic untuk autentikasi: register & login.
+ * Login menyimpan session via AuthMiddleware.createSession().
+ */
+
 class AuthService {
   constructor() {
     this.userRepo = new UserRepository();
@@ -7,13 +13,15 @@ class AuthService {
     if (!CryptoUtils.isPasswordStrong(password)) {
       return {
         success: false,
-        message: "Password tidak memenuhi syarat keamanan.",
+        message:
+          "Password tidak memenuhi syarat: min 8 karakter, " +
+          "huruf besar, huruf kecil, angka, dan simbol (@$!%*?&#).",
       };
     }
 
     const existingUser = this.userRepo.findByEmail(email);
     if (existingUser) {
-      return { success: false, message: "Email sudah terdaftar!" };
+      return { success: false, message: "Email sudah terdaftar." };
     }
 
     const newUser = {
@@ -25,7 +33,7 @@ class AuthService {
     };
 
     this.userRepo.create(newUser);
-    return { success: true, message: "Registrasi berhasil." };
+    return { success: true, message: "Registrasi berhasil. Silakan login." };
   }
 
   login(email, password) {
@@ -39,11 +47,19 @@ class AuthService {
       return { success: false, message: "Email atau password salah." };
     }
 
+    // Buat session setelah kredensial valid
+    AuthMiddleware.createSession(user.email, user.role);
+
     return {
       success: true,
-      message: "Login berhasil!",
+      message: "Login berhasil.",
       role: user.role,
       email: user.email,
     };
+  }
+
+  logout() {
+    AuthMiddleware.destroySession();
+    return { success: true, message: "Logout berhasil." };
   }
 }

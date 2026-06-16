@@ -1,0 +1,136 @@
+<script>
+  /* ==========================================================
+     scripts.auth.html
+     JavaScript client-side untuk halaman publik (login & register).
+     Hanya dimuat di index.public.html.
+  ========================================================== */
+
+  // ── Navigasi antar view ──────────────────────────────────
+
+  function switchAuthView(viewId) {
+    ["login-view", "register-view"].forEach(function (id) {
+      document.getElementById(id).classList.add("hidden");
+    });
+    document.getElementById(viewId).classList.remove("hidden");
+    _clearAllMessages();
+  }
+
+  function _clearAllMessages() {
+    ["login-msg", "reg-msg"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = "";
+      el.className = "msg";
+    });
+  }
+
+  function _setMsg(elId, text, type) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = text;
+    el.className = "msg " + (type || "info");
+  }
+
+  function _setLoading(btnId, isLoading, defaultText) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? "Memproses…" : defaultText;
+  }
+
+  // ── Handler Login ────────────────────────────────────────
+
+  function handleLogin() {
+    var email = document.getElementById("login-email").value.trim();
+    var pass = document.getElementById("login-password").value;
+
+    if (!email || !pass) {
+      _setMsg("login-msg", "Email dan password wajib diisi.", "error");
+      return;
+    }
+
+    _setLoading("login-btn", true, "Masuk");
+    _setMsg("login-msg", "Memverifikasi kredensial…", "info");
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        _setLoading("login-btn", false, "Masuk");
+        if (res.success) {
+          _setMsg("login-msg", "Login berhasil! Mengalihkan…", "success");
+          // Reload agar doGet() server mengevaluasi session baru
+          // dan merender index.app.html
+          setTimeout(function () {
+            google.script.run
+              .withSuccessHandler(function (url) {
+                window.top.location.href = url;
+              })
+              .getWebAppUrl();
+          }, 600);
+        } else {
+          _setMsg("login-msg", res.message, "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        _setLoading("login-btn", false, "Masuk");
+        _setMsg(
+          "login-msg",
+          "Terjadi kesalahan teknis: " + err.message,
+          "error",
+        );
+      })
+      .apiLoginUser(email, pass);
+  }
+
+  // ── Handler Register ─────────────────────────────────────
+
+  function handleRegister() {
+    var email = document.getElementById("reg-email").value.trim();
+    var pass = document.getElementById("reg-password").value;
+    var confirm = document.getElementById("reg-password-confirm").value;
+
+    if (!email || !pass || !confirm) {
+      _setMsg("reg-msg", "Semua kolom wajib diisi.", "error");
+      return;
+    }
+
+    if (pass !== confirm) {
+      _setMsg("reg-msg", "Konfirmasi password tidak cocok.", "error");
+      return;
+    }
+
+    _setLoading("reg-btn", true, "Daftar");
+    _setMsg("reg-msg", "Mendaftarkan akun…", "info");
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        _setLoading("reg-btn", false, "Daftar");
+        if (res.success) {
+          _setMsg("reg-msg", res.message, "success");
+          setTimeout(function () {
+            switchAuthView("login-view");
+          }, 1800);
+        } else {
+          _setMsg("reg-msg", res.message, "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        _setLoading("reg-btn", false, "Daftar");
+        _setMsg("reg-msg", "Terjadi kesalahan teknis: " + err.message, "error");
+      })
+      .apiRegisterAdmin(email, pass);
+  }
+
+  // ── Enter key shortcut ───────────────────────────────────
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var loginVisible = !document
+      .getElementById("login-view")
+      .classList.contains("hidden");
+    if (loginVisible) {
+      handleLogin();
+    } else {
+      handleRegister();
+    }
+  });
+</script>

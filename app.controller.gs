@@ -1,15 +1,32 @@
-// app.controller.gs
+/**
+ * app.controller.gs
+ * Entry point aplikasi web.
+ *
+ * doGet() menjalankan middleware server-side sebelum merender halaman.
+ * Jika session valid → render halaman app (dashboard).
+ * Jika session tidak ada/kedaluwarsa → render halaman public (login).
+ *
+ * Ini adalah lapisan proteksi pertama: user yang belum login
+ * tidak akan pernah menerima HTML halaman dalam app.
+ */
 
-function doGet() {
-  // Gunakan createTemplateFromFile agar kita bisa mengeksekusi tag penyisipan <?!= ?>
-  return HtmlService.createTemplateFromFile("index")
+function doGet(e) {
+  var auth = AuthMiddleware.requireAuth();
+  var page = auth.authorized ? "index.app" : "index.public";
+  var title = auth.authorized ? "Dashboard Admin" : "Login Admin";
+
+  return HtmlService.createTemplateFromFile(page)
     .evaluate()
-    .setTitle("Admin Dashboard App")
+    .setTitle(title)
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// Fungsi helper mutlak untuk menyisipkan file HTML/CSS/JS ke file index utama
+/**
+ * Helper untuk menyisipkan konten file HTML ke dalam template.
+ * Digunakan via scriptlet: <?!= include('nama-file'); ?>
+ * @param {string} filename  Nama file tanpa ekstensi
+ */
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
