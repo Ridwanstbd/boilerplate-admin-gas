@@ -9,7 +9,6 @@
   }
 
   function clearMessages() {
-    // FIX BUG 7: Elemen ini sekarang ada di view.login.html
     document.getElementById("login-msg").innerText = "";
     document.getElementById("reg-msg").innerText = "";
   }
@@ -31,7 +30,6 @@
     google.script.run
       .withSuccessHandler(function (response) {
         if (response.success) {
-          // FIX BUG 6: Elemen user-email sekarang ada di dashboard-view
           document.getElementById("user-email").innerText = response.email;
           switchView("dashboard-view");
         } else {
@@ -46,7 +44,6 @@
       .apiLoginUser(email, pass);
   }
 
-  // FIX BUG 4: Implementasi fungsi register yang sebelumnya tidak ada
   function handleRegister() {
     const email = document.getElementById("reg-email").value;
     const pass = document.getElementById("reg-password").value;
@@ -79,10 +76,27 @@
       .apiRegisterAdmin(email, pass);
   }
 
-  // FIX BUG 4: Implementasi fungsi logout yang sebelumnya tidak ada
   function handleLogout() {
     switchView("login-view");
     document.getElementById("login-email").value = "";
     document.getElementById("login-password").value = "";
+  }
+
+  // --- FUNGSI NAVIGASI DASHBOARD ---
+  function switchTab(tabId) {
+    // 1. Sembunyikan semua konten tab
+    const contents = document.querySelectorAll(".tab-content");
+    contents.forEach((content) => content.classList.add("hidden"));
+
+    // 2. Hapus class 'active' dari semua menu navigasi
+    const navItems = document.querySelectorAll(".nav-item");
+    navItems.forEach((item) => item.classList.remove("active"));
+
+    // 3. Tampilkan tab yang dipilih
+    document.getElementById(tabId).classList.remove("hidden");
+
+    // 4. Set status 'active' pada item navigasi terkait (Sidebar & Bottom Nav)
+    const activeNavs = document.querySelectorAll(`[data-target="${tabId}"]`);
+    activeNavs.forEach((nav) => nav.classList.add("active"));
   }
 </script>
