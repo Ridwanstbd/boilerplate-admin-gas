@@ -1,13 +1,23 @@
 class UserRepository {
   constructor() {
     this.sheetName = "Users";
-    this.sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-      this.sheetName,
-    );
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // FIX BUG 1: Validasi spreadsheet tersedia
+    if (!ss) {
+      throw new Error(
+        "Spreadsheet tidak ditemukan. Pastikan script dijalankan dari dalam Google Sheet.",
+      );
+    }
+
+    this.sheet = ss.getSheetByName(this.sheetName);
   }
 
   findAll() {
-    if (!this.sheet) throw new Error("Database belum disetup.");
+    if (!this.sheet)
+      throw new Error(
+        "Tabel 'Users' belum dibuat. Jalankan runMigrate() terlebih dahulu.",
+      );
     return this.sheet.getDataRange().getValues();
   }
 
@@ -30,7 +40,10 @@ class UserRepository {
   }
 
   create(user) {
-    if (!this.sheet) throw new Error("Database belum disetup.");
+    if (!this.sheet)
+      throw new Error(
+        "Tabel 'Users' belum dibuat. Jalankan runMigrate() terlebih dahulu.",
+      );
     this.sheet.appendRow([
       user.id,
       user.email,

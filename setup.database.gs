@@ -7,7 +7,14 @@ class DatabaseMigration {
   constructor() {
     this.ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // Skema Tabel KalkuPrice
+    // FIX BUG 1: Validasi spreadsheet tersedia
+    if (!this.ss) {
+      throw new Error(
+        "Spreadsheet tidak ditemukan. Pastikan script dijalankan dari dalam Google Sheet (Extensions > Apps Script), bukan sebagai Standalone Script.",
+      );
+    }
+
+    // Skema Tabel
     this.schema = {
       Users: ["ID", "Email", "PasswordHash", "Role", "Created_At"],
     };
@@ -31,13 +38,14 @@ class DatabaseMigration {
         );
 
         if (missingColumns.length > 0) {
-          const startCol = existingHeaders.length + 1;
+          const startCol = existingHeaders.filter((h) => h !== "").length + 1;
           sheet
             .getRange(1, startCol, 1, missingColumns.length)
             .setValues([missingColumns]);
           this._formatHeader(
             sheet,
-            existingHeaders.length + missingColumns.length,
+            existingHeaders.filter((h) => h !== "").length +
+              missingColumns.length,
           );
           Logger.log(
             `[UPDATE] Menambahkan kolom ${missingColumns.join(", ")} ke tabel '${sheetName}'.`,
@@ -95,17 +103,14 @@ class DatabaseMigration {
     };
 
     const timestamp = new Date();
-
-    // ID Relasional untuk data dummy
     const adminId = Utilities.getUuid();
-    const productId = Utilities.getUuid();
+    // FIX BUG 2: Hapus productId yang tidak terpakai
 
-    // Data Dummy KalkuPrice (Contoh: Keripik Pisang Lumer)
     const seedData = {
       Users: [
         [
           adminId,
-          "admin@kalkuprice.com",
+          "admin@example.com",
           hashPassword("Admin123!"),
           "admin",
           timestamp,
@@ -116,7 +121,6 @@ class DatabaseMigration {
     for (const [sheetName, rows] of Object.entries(seedData)) {
       const sheet = this.ss.getSheetByName(sheetName);
       if (sheet) {
-        // Cek apakah tabel masih kosong (hanya ada header)
         if (sheet.getLastRow() <= 1) {
           rows.forEach((row) => sheet.appendRow(row));
           Logger.log(
@@ -150,28 +154,49 @@ class DatabaseMigration {
 // =====================================================================
 
 function runMigrate() {
-  const db = new DatabaseMigration();
-  db.migrate();
+  try {
+    const db = new DatabaseMigration();
+    db.migrate();
+  } catch (e) {
+    Logger.log("[ERROR] " + e.message);
+    throw e;
+  }
 }
 
 function runSeeder() {
-  const db = new DatabaseMigration();
-  db.seed();
+  try {
+    const db = new DatabaseMigration();
+    db.seed();
+  } catch (e) {
+    Logger.log("[ERROR] " + e.message);
+    throw e;
+  }
 }
 
-/** * Fungsi Ultimate untuk Development:
+/**
+ * Fungsi Ultimate untuk Development:
  * Hapus Semua Tabel -> Buat Ulang Tabel -> Masukkan Data Dummy
  */
 function runRefreshAndSeed() {
-  const db = new DatabaseMigration();
-  db.refresh();
-  db.seed();
-  Logger.log(
-    "DATABASE SIAP DIGUNAKAN! Login: admin@kalkuprice.com | Pass: Admin123!",
-  );
+  try {
+    const db = new DatabaseMigration();
+    db.refresh();
+    db.seed();
+    Logger.log(
+      "DATABASE SIAP DIGUNAKAN! Login: admin@example.com | Pass: Admin123!",
+    );
+  } catch (e) {
+    Logger.log("[ERROR] " + e.message);
+    throw e;
+  }
 }
 
 function runRollbackSpecificTable() {
-  const db = new DatabaseMigration();
-  db.rollback("Products");
+  try {
+    const db = new DatabaseMigration();
+    db.rollback("Users");
+  } catch (e) {
+    Logger.log("[ERROR] " + e.message);
+    throw e;
+  }
 }

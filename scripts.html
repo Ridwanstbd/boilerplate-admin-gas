@@ -9,6 +9,7 @@
   }
 
   function clearMessages() {
+    // FIX BUG 7: Elemen ini sekarang ada di view.login.html
     document.getElementById("login-msg").innerText = "";
     document.getElementById("reg-msg").innerText = "";
   }
@@ -27,10 +28,10 @@
     msgDiv.innerText = "Memverifikasi...";
     msgDiv.style.color = "blue";
 
-    // Memanggil Controller (auth.controller.gs)
     google.script.run
       .withSuccessHandler(function (response) {
         if (response.success) {
+          // FIX BUG 6: Elemen user-email sekarang ada di dashboard-view
           document.getElementById("user-email").innerText = response.email;
           switchView("dashboard-view");
         } else {
@@ -38,8 +39,50 @@
           msgDiv.style.color = "red";
         }
       })
+      .withFailureHandler(function (err) {
+        msgDiv.innerText = "Terjadi kesalahan: " + err.message;
+        msgDiv.style.color = "red";
+      })
       .apiLoginUser(email, pass);
   }
 
-  // Fungsi register dan logout diletakkan di sini juga
+  // FIX BUG 4: Implementasi fungsi register yang sebelumnya tidak ada
+  function handleRegister() {
+    const email = document.getElementById("reg-email").value;
+    const pass = document.getElementById("reg-password").value;
+    const msgDiv = document.getElementById("reg-msg");
+
+    if (!email || !pass) {
+      msgDiv.innerText = "Isi email dan password.";
+      msgDiv.style.color = "red";
+      return;
+    }
+
+    msgDiv.innerText = "Mendaftarkan...";
+    msgDiv.style.color = "blue";
+
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (response.success) {
+          msgDiv.innerText = response.message + " Silakan login.";
+          msgDiv.style.color = "green";
+          setTimeout(() => switchView("login-view"), 1500);
+        } else {
+          msgDiv.innerText = response.message;
+          msgDiv.style.color = "red";
+        }
+      })
+      .withFailureHandler(function (err) {
+        msgDiv.innerText = "Terjadi kesalahan: " + err.message;
+        msgDiv.style.color = "red";
+      })
+      .apiRegisterAdmin(email, pass);
+  }
+
+  // FIX BUG 4: Implementasi fungsi logout yang sebelumnya tidak ada
+  function handleLogout() {
+    switchView("login-view");
+    document.getElementById("login-email").value = "";
+    document.getElementById("login-password").value = "";
+  }
 </script>
