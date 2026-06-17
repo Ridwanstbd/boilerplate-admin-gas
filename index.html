@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <base target="_top" />
+    <?!= include('styles.base'); ?> <?!= include('styles.auth'); ?> <?!=
+    include('styles.app'); ?>
+  </head>
+  <body>
+    <div id="public-shell" class="auth-bg">
+      <?!= include('view.login'); ?> <?!= include('view.register'); ?>
+    </div>
+
+    <div id="app-shell" class="app-bg hidden">
+      <?!= include('view.dashboard'); ?>
+    </div>
+
+    <?!= include('scripts.auth'); ?> <?!= include('scripts.app'); ?> <?!=
+    include('scripts.boot'); ?>
+  </body>
+</html>

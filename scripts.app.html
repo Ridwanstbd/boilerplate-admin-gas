@@ -50,25 +50,10 @@
   // ── Logout ───────────────────────────────────────────────
 
   function handleLogout() {
-    var btn = document.querySelector(".sidebar__footer .btn-ghost");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Keluar…";
-    }
+    localStorage.removeItem("gas_admin_session");
 
-    var tokenToDestroy = _token;
+    _bootPublic();
 
-    // Hapus cookie di client DULU — refresh selama proses pun sudah aman
-    _deleteCookie(TOKEN_KEY);
-    _token = null;
-
-    google.script.run
-      .withSuccessHandler(function () {
-        _bootPublic();
-      })
-      .withFailureHandler(function () {
-        _bootPublic();
-      })
-      .apiLogout(tokenToDestroy);
+    google.script.run.apiLogout();
   }
 </script>

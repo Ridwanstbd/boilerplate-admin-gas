@@ -11,13 +11,9 @@
  */
 
 function doGet(e) {
-  var auth = AuthMiddleware.requireAuth();
-  var page = auth.authorized ? "index.app" : "index.public";
-  var title = auth.authorized ? "Dashboard Admin" : "Login Admin";
-
-  return HtmlService.createTemplateFromFile(page)
+  return HtmlService.createTemplateFromFile("index")
     .evaluate()
-    .setTitle(title)
+    .setTitle("Admin Dashboard")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

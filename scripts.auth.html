@@ -54,13 +54,16 @@
       .withSuccessHandler(function (res) {
         _setLoading("login-btn", false, "Masuk");
         if (res.success) {
-          // Simpan token di cookie — persisten saat refresh iframe GAS
-          _setCookie(TOKEN_KEY, res.token);
-          _token = res.token;
+          // Buat objek data user
+          var sessionData = { email: res.email, role: res.role };
+
+          // SIMPAN KE LOCAL STORAGE
+          localStorage.setItem(TOKEN_KEY, JSON.stringify(sessionData));
+
           _setMsg("login-msg", "Berhasil masuk!", "success");
           setTimeout(function () {
-            _bootApp({ email: res.email, role: res.role });
-          }, 350);
+            _bootApp(sessionData);
+          }, 500);
         } else {
           _setMsg("login-msg", res.message, "error");
         }
