@@ -3,19 +3,330 @@
   <head>
     <meta charset="UTF-8" />
     <base target="_top" />
-    <?!= include('styles.base'); ?> <?!= include('styles.auth'); ?> <?!=
-    include('styles.app'); ?>
+    <style>
+      :root {
+        --primary: #4a90e2;
+        --bg: #f0f2f5;
+        --surface: #ffffff;
+        --text: #333;
+        --muted: #666;
+        --danger: #e74c3c;
+        --border: #dde1e7;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        min-height: 100vh;
+      }
+
+      /* Desain Navigasi Sidebar */
+      aside {
+        width: 250px;
+        background: #1e2a3a;
+        color: #a8b8cc;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      aside h1 {
+        color: #fff;
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-bottom: 3px;
+      }
+      aside p {
+        font-size: 0.75rem;
+        margin-bottom: 25px;
+        color: #627d98;
+      }
+      .nav-item {
+        padding: 12px;
+        margin-bottom: 6px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 0.88rem;
+        transition: 0.2s;
+      }
+      .nav-item:hover,
+      .nav-item.active {
+        background: rgba(74, 144, 226, 0.15);
+        color: #fff;
+        font-weight: 500;
+      }
+      .sidebar-footer {
+        margin-top: auto;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      /* Area Konten Utama */
+      main {
+        flex: 1;
+        padding: 30px;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid var(--border);
+      }
+      header h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .card {
+        background: var(--surface);
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+        border: 1px solid var(--border);
+        margin-bottom: 20px;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .btn {
+        padding: 9px 18px;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.88rem;
+      }
+      .btn:hover {
+        opacity: 0.9;
+      }
+      .msg {
+        margin-top: 12px;
+        font-size: 0.85rem;
+        font-weight: bold;
+      }
+      .error {
+        color: var(--danger);
+      }
+      .success {
+        color: #27ae60;
+      }
+    </style>
   </head>
   <body>
-    <div id="public-shell" class="auth-bg">
-      <?!= include('view.login'); ?> <?!= include('view.register'); ?>
-    </div>
+    <aside>
+      <div>
+        <h1>⚙️ Core Accounting</h1>
+        <p>Sistem Kontrol Finansial</p>
+      </div>
+      <nav>
+        <div class="nav-item active" onclick="pindahHalaman('dashboard')">
+          📊 Dashboard Utama
+        </div>
 
-    <div id="app-shell" class="app-bg hidden">
-      <?!= include('view.dashboard'); ?>
-    </div>
+        <div
+          id="nav-transaksi"
+          class="nav-item hidden"
+          onclick="pindahHalaman('transaksi')"
+        >
+          📝 Catat Transaksi
+        </div>
 
-    <?!= include('scripts.auth'); ?> <?!= include('scripts.app'); ?> <?!=
-    include('scripts.boot'); ?>
+        <div
+          id="nav-settings"
+          class="nav-item hidden"
+          onclick="pindahHalaman('settings')"
+        >
+          ⚙️ Pengaturan Sistem
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div
+          style="
+            font-weight: 500;
+            color: #fff;
+            font-size: 0.82rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+          "
+          id="akun-aktif"
+        >
+          -
+        </div>
+        <div
+          style="
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            color: var(--primary);
+            font-weight: 600;
+            margin-top: 2px;
+          "
+          id="role-aktif"
+        >
+          -
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <header>
+        <h2 id="judul-halaman">Dashboard Utama</h2>
+        <div style="font-size: 0.82rem; color: var(--muted)">
+          Otorisasi Google Terhubung Mac
+        </div>
+      </header>
+
+      <div id="hal-dashboard" class="page-view">
+        <div class="card">
+          <h3>Ringkasan Otoritas Sesi</h3>
+          <p
+            style="
+              margin-top: 8px;
+              color: var(--muted);
+              font-size: 0.9rem;
+              line-height: 1.6;
+            "
+          >
+            Aplikasi berhasil dijalankan menggunakan token enkripsi internal
+            Google Workspace Anda. Seluruh data keuangan di dalam spreadsheet
+            terikat langsung ke akun ini.
+          </p>
+          <div
+            id="info-server"
+            style="
+              margin-top: 15px;
+              font-size: 0.88rem;
+              color: #27ae60;
+              font-weight: 500;
+            "
+          >
+            Menghubungkan ke server...
+          </div>
+        </div>
+      </div>
+
+      <div id="hal-transaksi" class="page-view hidden">
+        <div class="card">
+          <h3>Pencatatan Finansial Baru</h3>
+          <p
+            style="color: var(--muted); font-size: 0.9rem; margin-bottom: 15px"
+          >
+            Fasilitas ini terbuka untuk tingkat modifikasi data (Admin &
+            Editor).
+          </p>
+          <button
+            class="btn"
+            onclick="alert('Data transaksi masuk antrean sistem!')"
+          >
+            Simpan Record
+          </button>
+        </div>
+      </div>
+
+      <div id="hal-settings" class="page-view hidden">
+        <div class="card">
+          <h3>Akses Master Pengaturan</h3>
+          <p
+            style="color: var(--muted); font-size: 0.9rem; margin-bottom: 15px"
+          >
+            Fitur berisiko tinggi. Modifikasi di sini akan mempengaruhi struktur
+            inti sheet keuangan.
+          </p>
+          <button class="btn" onclick="eksekusiSimpanSetelan()">
+            Simpan Konfigurasi Sistem
+          </button>
+          <div id="status-setelan" class="msg"></div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // Injeksi parameter server langsung saat halaman dimuat
+      const DATA_EMAIL = "<?= userEmail ?>";
+      const DATA_ROLE = "<?= userRole ?>";
+
+      window.onload = function () {
+        // 1. Tampilkan data profil di sidebar footer
+        document.getElementById("akun-aktif").textContent = DATA_EMAIL;
+        document.getElementById("role-aktif").textContent = DATA_ROLE;
+
+        // 2. Evaluasi Hak Akses Menu UI (Role-Based Access Control)
+        if (DATA_ROLE === "admin" || DATA_ROLE === "editor") {
+          document.getElementById("nav-transaksi").classList.remove("hidden");
+        }
+        if (DATA_ROLE === "admin") {
+          document.getElementById("nav-settings").classList.remove("hidden");
+        }
+
+        // 3. Tarik data dari server secara background
+        ambilKoneksiDashboard();
+      };
+
+      // Mekanisme Tab Navigasi Tanpa Muat Ulang Halaman
+      function pindahHalaman(pageId) {
+        document
+          .querySelectorAll(".page-view")
+          .forEach((el) => el.classList.add("hidden"));
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((el) => el.classList.remove("active"));
+
+        document.getElementById("hal-" + pageId).classList.remove("hidden");
+        event.currentTarget.classList.add("active");
+
+        const mappingJudul = {
+          dashboard: "Dashboard Utama",
+          transaksi: "Catat Transaksi",
+          settings: "Pengaturan Sistem",
+        };
+        document.getElementById("judul-halaman").textContent =
+          mappingJudul[pageId];
+      }
+
+      // Panggilan Server Aman
+      function ambilKoneksiDashboard() {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res.success) {
+              document.getElementById("info-server").textContent =
+                `${res.pesan} (Total Pengguna Whitelist: ${res.totalTerdaftar})`;
+            }
+          })
+          .apiAmbilDataDashboard();
+      }
+
+      function eksekusiSimpanSetelan() {
+        const elemenStatus = document.getElementById("status-setelan");
+        elemenStatus.className = "msg";
+        elemenStatus.textContent = "Mengirim perintah kustom...";
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res.success) {
+              elemenStatus.className = "msg success";
+              elemenStatus.textContent = res.message;
+            } else {
+              elemenStatus.className = "msg error";
+              elemenStatus.textContent = res.message;
+            }
+          })
+          .withFailureHandler(function (err) {
+            elemenStatus.className = "msg error";
+            elemenStatus.textContent = "Sistem gagal: " + err.message;
+          })
+          .apiSimpanPengaturan({ status: "aktif" });
+      }
+    </script>
   </body>
 </html>
